@@ -408,6 +408,7 @@ const gameState = {
 let currentFase = 1;
 let selectedSurgeryKey = null;
 let equipeConfirmada = false;
+let selectedMesaItem = null;
 
 function showFase(n) {
   currentFase = n;
@@ -442,6 +443,7 @@ function resetMesa() {
 
   gameState.respostaMesa = answer;
   gameState.posicoesMesa = { 1: null, 2: null, 3: null, 4: null, 5: null, 6: null };
+  selectedMesaItem = null;
 }
 
 function resetEquipe() {
@@ -596,9 +598,24 @@ function goFase3() {
 function allowDrop(e) { e.preventDefault(); }
 function dragStart(e) { e.dataTransfer.setData("item", e.target.dataset.item); }
 
+function setMesaItemSelection(itemName) {
+  selectedMesaItem = selectedMesaItem === itemName ? null : itemName;
+  renderFase3();
+}
+
 function getAvailableMesaItems() {
   const used = new Set(Object.values(gameState.posicoesMesa).filter(Boolean));
   return Object.values(gameState.respostaMesa).filter((name) => !used.has(name));
+}
+
+function assignMesaItem(campo, item) {
+  if (!item || !campo) return;
+
+  Object.keys(gameState.posicoesMesa).forEach((slot) => {
+    if (gameState.posicoesMesa[slot] === item) gameState.posicoesMesa[slot] = null;
+  });
+
+  gameState.posicoesMesa[campo] = item;
 }
 
 function dropMesa(e) {
@@ -607,17 +624,25 @@ function dropMesa(e) {
   const campo = e.currentTarget.dataset.campo;
   if (!item || !campo) return;
 
-  Object.keys(gameState.posicoesMesa).forEach((slot) => {
-    if (gameState.posicoesMesa[slot] === item) gameState.posicoesMesa[slot] = null;
-  });
-
-  gameState.posicoesMesa[campo] = item;
+  assignMesaItem(campo, item);
+  selectedMesaItem = null;
   renderFase3();
 }
 
 function clearCampo(campo) {
   gameState.posicoesMesa[campo] = null;
   renderFase3();
+}
+
+function handleCampoTap(campo) {
+  if (selectedMesaItem) {
+    assignMesaItem(campo, selectedMesaItem);
+    selectedMesaItem = null;
+    renderFase3();
+    return;
+  }
+
+  clearCampo(campo);
 }
 
 function renderFase3() {
@@ -627,15 +652,19 @@ function renderFase3() {
   const order = orderByDirection[direction] || orderByDirection.horario;
   const available = getAvailableMesaItems();
 
-  const bankHtml = available.map((name) => `
-    <div class="draggable" draggable="true" data-item="${name}" ondragstart="dragStart(event)">${name}</div>
-  `).join("");
+  const bankHtml = available.map((name) => {
+    const escapedName = name.replace(/'/g, "\\'");
+    const selectedClass = selectedMesaItem === name ? " selected" : "";
+    return `
+    <div class="draggable${selectedClass}" draggable="true" data-item="${name}" ondragstart="dragStart(event)" onclick="setMesaItemSelection('${escapedName}')">${name}</div>
+  `;
+  }).join("");
 
   const slotsHtml = order.map((campo) => {
     const itemKey = gameState.posicoesMesa[campo];
 
     return `
-      <div class="campo" data-campo="${campo}" ondragover="allowDrop(event); this.classList.add('over')" ondragleave="this.classList.remove('over')" ondrop="this.classList.remove('over'); dropMesa(event)" onclick="clearCampo(${campo})">
+      <div class="campo" data-campo="${campo}" ondragover="allowDrop(event); this.classList.add('over')" ondragleave="this.classList.remove('over')" ondrop="this.classList.remove('over'); dropMesa(event)" onclick="handleCampoTap(${campo})">
         <span class="campo-label">${slotLabels[campo]}</span>
         <span class="campo-item">${itemKey ? itemKey : "(vazio)"}</span>
         <span class="campo-hint"></span>
@@ -648,6 +677,7 @@ function renderFase3() {
   document.getElementById("fase3").innerHTML = `
     <h2 class="q-title">3. Monte a Mesa</h2>
     <p class="subtitle">Âncora: cirurgião no lado <strong>${mesaAnchor.cirugiaoLado}</strong> | Sentido: <strong>${direction}</strong>.</p>
+    <p class="subtitle">No celular: toque em um item do banco e depois toque no campo desejado.</p>
 
     <div class="bank">
       <p class="bank-title">Banco de instrumentos</p>

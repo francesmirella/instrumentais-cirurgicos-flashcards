@@ -373,6 +373,12 @@ h1 {
 .option-btn.selected,
 .card-btn.selected { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(127,183,255,.35); }
 
+.draggable.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(127,183,255,.35);
+  background: rgba(127,183,255,.26);
+}
+
 /******** Simulação ********/
 .progress-track { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
 .pill {
