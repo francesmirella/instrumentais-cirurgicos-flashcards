@@ -288,7 +288,6 @@ h1 { margin: 0 0 8px; color: #0f4c81; font-weight: 800; letter-spacing: -0.02em;
   <div class="topbar">
     <a class="btn" href="flashcards.html">← Voltar para Instrumentais</a>
     <a class="btn" href="sintese.html">Síntese</a>
-    <a class="btn" href="monte-mesa.html">Monte a Mesa</a>
     <a class="btn" href="qual-e-o-sinal.html">Qual é o Sinal?</a>
   </div>
 
@@ -363,17 +362,17 @@ const CAMPO_ITENS = {
 const INSTRUMENTOS = Array.from(new Set(Object.values(CAMPO_ITENS).flat()));
 
 const EQUIPE_ITENS = {
-  cirurgiao: "🔴 Cirurgião",
-  auxiliar: "🟡 1º Auxiliar",
-  instrumentador: "🔵 Instrumentador",
-  "mesa-mayo": "🟢 Mesa + Mayo"
+  cirurgiao: { symbol: "▲", label: "Cirurgião" },
+  auxiliar: { symbol: "◆", label: "Auxiliar" },
+  instrumentador: { symbol: "●", label: "Instrumentador" },
+  "mesa-mayo": { symbol: "■", label: "Mesa + Mayo" }
 };
 
 const slotLabels = {
   1: "1 — Diérese",
   2: "2 — Preensão",
   3: "3 — Hemostasia",
-  4: "4 — Exposição",
+  4: "4 — Afastadores",
   5: "5 — Especial",
   6: "6 — Síntese"
 };
@@ -391,10 +390,7 @@ const MESA_CONFIG = {
   }
 };
 
-const orderByDirection = {
-  horario: [1, 2, 3, 4, 5, 6],
-  "anti-horario": [3, 2, 1, 6, 5, 4]
-};
+const ORDEM_MESA_SIMULACAO = [1, 2, 3, 6, 5, 4];
 
 const gameState = {
   cirurgiaSelecionada: null,
@@ -409,6 +405,15 @@ let currentFase = 1;
 let selectedSurgeryKey = null;
 let equipeConfirmada = false;
 let selectedMesaItem = null;
+
+function shuffle(array) {
+  const copy = [...array];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
 
 function showFase(n) {
   currentFase = n;
@@ -457,36 +462,47 @@ function getTipoCirurgia() {
   return quadrante.includes("supra") ? "supraUmbilical" : "infraUmbilical";
 }
 
-function getEquipeLayout() {
+function getEquipeZones() {
   if (getTipoCirurgia() === "supraUmbilical") {
     return [
-      { key: "lateral-inferior-direita", className: "slot-lateral-inferior-direita", label: "Lateral inferior direita", expected: "cirurgiao" },
-      { key: "lateral-superior-esquerda", className: "slot-lateral-superior-esquerda", label: "Lateral superior esquerda", expected: "auxiliar" },
-      { key: "ao-lado-auxiliar", className: "slot-ao-lado-auxiliar-esquerda", label: "Ao lado do auxiliar", expected: "instrumentador" },
-      { key: "atras-do-instrumentador", className: "slot-atras-instrumentador-esquerda", label: "Atrás do instrumentador", expected: "mesa-mayo" }
+      { key: "zona-cirurgiao", x1: 60, x2: 88, y1: 48, y2: 74, revealLabel: "Cirurgião no lado direito do paciente", expected: "cirurgiao" },
+      { key: "zona-auxiliar", x1: 14, x2: 42, y1: 44, y2: 70, revealLabel: "Auxiliar no lado esquerdo, de frente para o cirurgião", expected: "auxiliar" },
+      { key: "zona-instrumentador", x1: 14, x2: 42, y1: 68, y2: 92, revealLabel: "Instrumentador próximo aos pés, lado esquerdo", expected: "instrumentador" },
+      { key: "zona-mesa", x1: 0, x2: 22, y1: 70, y2: 94, revealLabel: "Mesa atrás do instrumentador", expected: "mesa-mayo" }
     ];
   }
 
   return [
-    { key: "lateral-inferior-esquerda", className: "slot-lateral-inferior-esquerda", label: "Lateral inferior esquerda", expected: "cirurgiao" },
-    { key: "lateral-superior-direita", className: "slot-lateral-superior-direita", label: "Lateral superior direita", expected: "auxiliar" },
-    { key: "ao-lado-auxiliar", className: "slot-ao-lado-auxiliar-direita", label: "Ao lado do auxiliar", expected: "instrumentador" },
-    { key: "atras-do-instrumentador", className: "slot-atras-instrumentador-direita", label: "Atrás do instrumentador", expected: "mesa-mayo" }
+    { key: "zona-cirurgiao", x1: 12, x2: 40, y1: 58, y2: 86, revealLabel: "Cirurgião no lado esquerdo (pelve)", expected: "cirurgiao" },
+    { key: "zona-auxiliar", x1: 58, x2: 86, y1: 44, y2: 70, revealLabel: "Auxiliar no lado direito", expected: "auxiliar" },
+    { key: "zona-instrumentador", x1: 58, x2: 86, y1: 68, y2: 92, revealLabel: "Instrumentador próximo aos pés, lado direito", expected: "instrumentador" },
+    { key: "zona-mesa", x1: 78, x2: 100, y1: 70, y2: 94, revealLabel: "Mesa atrás do instrumentador", expected: "mesa-mayo" }
   ];
+}
+
+function cirurgiaSelecionadaTexto() {
+  if (!gameState.cirurgiaSelecionada) return "";
+  return `<p class="subtitle surgery-indicator">Cirurgia selecionada: <strong>${surgeryExpected().label}</strong></p>`;
+}
+
+function equipeDisplay(itemKey, withLabel = true) {
+  const item = EQUIPE_ITENS[itemKey];
+  if (!item) return "";
+  return withLabel ? `${item.symbol} ${item.label}` : item.symbol;
 }
 
 function getEquipeAnswerKey() {
   const answerKey = {};
-  getEquipeLayout().forEach((slot) => {
-    answerKey[slot.key] = slot.expected;
+  getEquipeZones().forEach((zone) => {
+    answerKey[zone.expected] = zone;
   });
   return answerKey;
 }
 
 function createEmptyEquipePositions() {
   const positions = {};
-  getEquipeLayout().forEach((slot) => {
-    positions[slot.key] = null;
+  Object.keys(EQUIPE_ITENS).forEach((itemKey) => {
+    positions[itemKey] = null;
   });
   return positions;
 }
@@ -553,6 +569,7 @@ function renderFase2() {
 
   document.getElementById("fase2").innerHTML = `
     <h2 class="q-title">2. Raciocínio da Montagem</h2>
+    ${cirurgiaSelecionadaTexto()}
     <p class="subtitle">Responda em sequência.</p>
 
     <div class="question-box">
@@ -610,7 +627,6 @@ function getAvailableMesaItems() {
 
 function assignMesaItem(campo, item) {
   if (!item || !campo) return;
-
   Object.keys(gameState.posicoesMesa).forEach((slot) => {
     if (gameState.posicoesMesa[slot] === item) gameState.posicoesMesa[slot] = null;
   });
@@ -646,13 +662,10 @@ function handleCampoTap(campo) {
 }
 
 function renderFase3() {
-  const cfg = surgeryExpected();
-  const direction = cfg.sentidoMesa;
-  const mesaAnchor = cfg.posicaoCirurgiao === "direita" ? MESA_CONFIG.supraUmbilical : MESA_CONFIG.infraUmbilical;
-  const order = orderByDirection[direction] || orderByDirection.horario;
+  const order = ORDEM_MESA_SIMULACAO;
   const available = getAvailableMesaItems();
 
-  const bankHtml = available.map((name) => {
+  const bankHtml = shuffle(available).map((name) => {
     const escapedName = name.replace(/'/g, "\\'");
     const selectedClass = selectedMesaItem === name ? " selected" : "";
     return `
@@ -676,7 +689,8 @@ function renderFase3() {
 
   document.getElementById("fase3").innerHTML = `
     <h2 class="q-title">3. Monte a Mesa</h2>
-    <p class="subtitle">Âncora: cirurgião no lado <strong>${mesaAnchor.cirugiaoLado}</strong> | Sentido: <strong>${direction}</strong>.</p>
+    ${cirurgiaSelecionadaTexto()}
+    <p class="subtitle">Sequência: Diérese → Preensão → Hemostasia / Síntese → Especial → Afastadores.</p>
     <p class="subtitle">No celular: toque em um item do banco e depois toque no campo desejado.</p>
 
     <div class="bank">
@@ -716,60 +730,145 @@ function goFase4() {
 }
 
 function getAvailableEquipeItems() {
-  const used = new Set(Object.values(gameState.posicoesEquipe).filter(Boolean));
-  return Object.keys(EQUIPE_ITENS).filter((key) => !used.has(key));
+  return Object.keys(EQUIPE_ITENS).filter((key) => !gameState.posicoesEquipe[key]);
 }
 
-function dropEquipe(e) {
+function equipeDragStart(e) { e.dataTransfer.setData("item", e.target.dataset.item); }
+
+function allowEquipeDrop(e) { e.preventDefault(); }
+
+function dropEquipeBoard(e) {
   e.preventDefault();
   const item = e.dataTransfer.getData("item");
-  const slot = e.currentTarget.dataset.posicao;
-  if (!item || !slot) return;
+  if (!item) return;
 
-  Object.keys(gameState.posicoesEquipe).forEach((key) => {
-    if (gameState.posicoesEquipe[key] === item) gameState.posicoesEquipe[key] = null;
-  });
+  const board = e.currentTarget;
+  const rect = board.getBoundingClientRect();
+  const x = ((e.clientX - rect.left) / rect.width) * 100;
+  const y = ((e.clientY - rect.top) / rect.height) * 100;
 
-  gameState.posicoesEquipe[slot] = item;
+  gameState.posicoesEquipe[item] = {
+    x: Math.max(4, Math.min(96, x)),
+    y: Math.max(8, Math.min(92, y))
+  };
   equipeConfirmada = false;
   renderFase4();
 }
 
-function clearSlotEquipe(slot) {
-  gameState.posicoesEquipe[slot] = null;
+function removeEquipeItem(itemKey) {
+  gameState.posicoesEquipe[itemKey] = null;
   equipeConfirmada = false;
   renderFase4();
+}
+
+function zoneForPoint(x, y, zones) {
+  return zones.find((zone) => x >= zone.x1 && x <= zone.x2 && y >= zone.y1 && y <= zone.y2) || null;
+}
+
+function isMesaBehindInstrumentador(mesaPos, instrumentadorPos) {
+  if (!mesaPos || !instrumentadorPos) return false;
+
+  const tipo = getTipoCirurgia();
+  const closeY = Math.abs(mesaPos.y - instrumentadorPos.y) <= 24;
+
+  if (tipo === "supraUmbilical") {
+    return mesaPos.x <= instrumentadorPos.x - 6 && closeY;
+  }
+
+  return mesaPos.x >= instrumentadorPos.x + 6 && closeY;
+}
+
+function isEquipeItemCorrect(itemKey, pos, positions, zones) {
+  if (!pos) return false;
+
+  if (itemKey === "mesa-mayo") {
+    const instrPos = positions.instrumentador;
+    if (isMesaBehindInstrumentador(pos, instrPos)) return true;
+  }
+
+  const zone = zoneForPoint(pos.x, pos.y, zones);
+  return !!zone && zone.expected === itemKey;
+}
+
+function buildResultErrors() {
+  const errors = [];
+  const r = gameState.respostasRaciocinio;
+
+  if (!r.q1Correta) errors.push("Raciocínio: pergunta 1 (supra/infra) incorreta.");
+  if (!r.q2Correta) errors.push("Raciocínio: pergunta 2 (lado do cirurgião) incorreta.");
+  if (!r.q3Correta) errors.push("Raciocínio: pergunta 3 (sentido da montagem) incorreta.");
+
+  Object.keys(gameState.posicoesMesa).forEach((campoKey) => {
+    const campo = Number(campoKey);
+    const escolhido = gameState.posicoesMesa[campo];
+    const esperado = gameState.respostaMesa[campo];
+    if (escolhido !== esperado) {
+      errors.push(`Mesa: ${slotLabels[campo]} deveria ter ${esperado}.`);
+    }
+  });
+
+  const zones = getEquipeZones();
+  const expected = getEquipeAnswerKey();
+  Object.keys(EQUIPE_ITENS).forEach((itemKey) => {
+    const pos = gameState.posicoesEquipe[itemKey];
+    const ok = isEquipeItemCorrect(itemKey, pos, gameState.posicoesEquipe, zones);
+    if (!ok) {
+      const target = itemKey === "mesa-mayo" ? "Atrás do instrumentador" : expected[itemKey].revealLabel;
+      errors.push(`Equipe: ${equipeDisplay(itemKey, true)} deveria estar em ${target}.`);
+    }
+  });
+
+  return errors;
+}
+
+function applyEquipeTokenPositions() {
+  document.querySelectorAll("#equipeBoard .team-token").forEach((token) => {
+    const x = Number(token.dataset.x || 0);
+    const y = Number(token.dataset.y || 0);
+    token.style.left = `${x}%`;
+    token.style.top = `${y}%`;
+  });
 }
 
 function renderFase4() {
-  const slotsLayout = getEquipeLayout();
+  const zones = getEquipeZones();
   const expected = getEquipeAnswerKey();
   const available = getAvailableEquipeItems();
-  const mayoClass = surgeryExpected().posicaoMayo === "esquerda" ? "mayo-ref esquerda" : "mayo-ref direita";
 
   const bankHtml = available.map((key) => `
-    <div class="draggable" draggable="true" data-item="${key}" ondragstart="dragStart(event)">${EQUIPE_ITENS[key]}</div>
+    <div class="draggable equipe-item" draggable="true" data-item="${key}" ondragstart="equipeDragStart(event)">${equipeDisplay(key, true)}</div>
   `).join("");
 
-  const slotsHtml = slotsLayout.map((slot) => {
-    const itemKey = gameState.posicoesEquipe[slot.key];
-    const extraClass = !equipeConfirmada ? "" : (itemKey === expected[slot.key] ? "correct" : "wrong");
-    const hint = !equipeConfirmada || itemKey === expected[slot.key] ? "" : `Esperado: ${EQUIPE_ITENS[expected[slot.key]]}`;
+  const droppedTokensHtml = Object.keys(EQUIPE_ITENS).map((itemKey) => {
+    const pos = gameState.posicoesEquipe[itemKey];
+    if (!pos) return "";
+
+    let extraClass = "";
+    let hint = "";
+    if (equipeConfirmada) {
+      if (isEquipeItemCorrect(itemKey, pos, gameState.posicoesEquipe, zones)) {
+        extraClass = "correct";
+        hint = "✔";
+      } else {
+        extraClass = "wrong";
+        hint = itemKey === "mesa-mayo" ? "✖ Atrás do instrumentador" : `✖ ${expected[itemKey].revealLabel}`;
+      }
+    }
 
     return `
-      <div class="team-slot ${slot.className} ${extraClass}" data-posicao="${slot.key}" ondragover="allowDrop(event); this.classList.add('over')" ondragleave="this.classList.remove('over')" ondrop="this.classList.remove('over'); dropEquipe(event)" onclick="clearSlotEquipe('${slot.key}')">
-        <span class="slot-label">${slot.label}</span>
-        <span class="slot-value">${itemKey ? EQUIPE_ITENS[itemKey] : "(solte aqui)"}</span>
-        <span class="slot-hint">${hint}</span>
+      <div class="team-token ${extraClass}" draggable="true" data-item="${itemKey}" data-x="${pos.x}" data-y="${pos.y}" ondragstart="equipeDragStart(event)" onclick="removeEquipeItem('${itemKey}')">
+        <span class="token-symbol">${equipeDisplay(itemKey, false)}</span>
+        <span class="token-hint">${hint}</span>
       </div>
     `;
   }).join("");
 
-  const allFilled = Object.values(gameState.posicoesEquipe).every(Boolean);
+  const allFilled = Object.keys(EQUIPE_ITENS).every((itemKey) => !!gameState.posicoesEquipe[itemKey]);
 
   document.getElementById("fase4").innerHTML = `
     <h2 class="q-title">4. Equipe</h2>
-    <p class="subtitle">Arraste os 4 itens para os 4 slots ao redor da maca e confirme.</p>
+    ${cirurgiaSelecionadaTexto()}
+    <p class="subtitle">Arraste os símbolos para qualquer área do tabuleiro. A linha no paciente indica o plano umbilical (supra/infra).</p>
 
     <div class="bank">
       <p class="bank-title">Equipe e mesa</p>
@@ -779,11 +878,12 @@ function renderFase4() {
     <div class="team-zone">
       <div class="axis-head">CABEÇA ▲</div>
       <div class="axis-foot">▼ PÉ</div>
-      <div class="axis-left">LADO ESQUERDO DO PACIENTE</div>
-      <div class="axis-right">LADO DIREITO DO PACIENTE</div>
-      <div class="paciente"><div class="paciente-cabeca"></div>Paciente</div>
-      <div class="${mayoClass}">MESA DE MAYO</div>
-      ${slotsHtml}
+      <div class="axis-left">LE</div>
+      <div class="axis-right">LD</div>
+      <div class="paciente"><div class="paciente-cabeca"></div><div class="paciente-umbigo"></div><div class="paciente-umbigo-label">Cicatriz umbilical</div>Paciente</div>
+      <div id="equipeBoard" class="team-board" ondragover="allowEquipeDrop(event)" ondrop="dropEquipeBoard(event)">
+        ${droppedTokensHtml}
+      </div>
     </div>
 
     <div class="topbar topbar-mt-12">
@@ -792,14 +892,18 @@ function renderFase4() {
       <button class="btn primary" type="button" onclick="goFase5()" ${equipeConfirmada ? "" : "disabled"}>Próxima fase</button>
     </div>
   `;
+
+  applyEquipeTokenPositions();
 }
 
 function confirmEquipe() {
-  const expected = getEquipeAnswerKey();
+  const zones = getEquipeZones();
   let correct = 0;
 
-  Object.keys(gameState.posicoesEquipe).forEach((slot) => {
-    if (gameState.posicoesEquipe[slot] === expected[slot]) correct += 1;
+  Object.keys(EQUIPE_ITENS).forEach((itemKey) => {
+    const pos = gameState.posicoesEquipe[itemKey];
+    if (!pos) return;
+    if (isEquipeItemCorrect(itemKey, pos, gameState.posicoesEquipe, zones)) correct += 1;
   });
 
   gameState.score.fase4 = correct;
@@ -826,9 +930,14 @@ function renderFase5() {
   const p4 = pct(gameState.score.fase4, 4);
   const total = gameState.score.fase2 + gameState.score.fase3 + gameState.score.fase4;
   const final10 = Math.round((total / 13) * 10);
+  const errors = buildResultErrors();
+  const errorsHtml = errors.length
+    ? `<div class="result-errors"><h3 class="q-title">O que você errou</h3><ul>${errors.map((item) => `<li>${item}</li>`).join("")}</ul></div>`
+    : `<div class="result-errors"><h3 class="q-title">O que você errou</h3><p class="subtitle subtitle-no-margin">Nenhum erro nesta simulação.</p></div>`;
 
   document.getElementById("fase5").innerHTML = `
     <h2 class="q-title">5. Resultado</h2>
+    ${cirurgiaSelecionadaTexto()}
     <p class="subtitle">Cirurgia: <strong>${surgeryExpected().label}</strong></p>
 
     <div class="result-grid">
@@ -847,6 +956,8 @@ function renderFase5() {
     </div>
 
     <p class="subtitle result-final"><strong>Score final: ${final10}/10</strong> — ${finalMessage(final10)}</p>
+
+    ${errorsHtml}
 
     <div class="topbar topbar-mt-10">
       <button class="btn" type="button" onclick="tentarNovamente()">Tentar novamente</button>
