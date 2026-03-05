@@ -556,6 +556,11 @@ h1 {
   border-color: #e57373;
   box-shadow: 0 0 0 2px rgba(229,115,115,.26);
 }
+
+.team-token.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(127,183,255,.35);
+}
 .team-slot {
   position: absolute;
   width: 170px;
@@ -722,5 +727,5 @@ html[data-theme="light"] .team-token .token-hint {
   .mode-grid-advanced { grid-template-columns: 1fr; }
   .mode-card.simulacao { grid-column: span 1; }
   .slot-grid,
-  .mesa-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mesa-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }

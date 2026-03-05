@@ -419,6 +419,7 @@ let currentFase = 1;
 let selectedSurgeryKey = null;
 let equipeConfirmada = false;
 let selectedMesaItem = null;
+let selectedEquipeItem = null;
 
 function shuffle(array) {
   const copy = [...array];
@@ -468,6 +469,7 @@ function resetMesa() {
 function resetEquipe() {
   gameState.posicoesEquipe = createEmptyEquipePositions();
   equipeConfirmada = false;
+  selectedEquipeItem = null;
 }
 
 function getTipoCirurgia() {
@@ -751,26 +753,54 @@ function equipeDragStart(e) { e.dataTransfer.setData("item", e.target.dataset.it
 
 function allowEquipeDrop(e) { e.preventDefault(); }
 
-function dropEquipeBoard(e) {
-  e.preventDefault();
-  const item = e.dataTransfer.getData("item");
-  if (!item) return;
-
-  const board = e.currentTarget;
-  const rect = board.getBoundingClientRect();
-  const x = ((e.clientX - rect.left) / rect.width) * 100;
-  const y = ((e.clientY - rect.top) / rect.height) * 100;
-
-  gameState.posicoesEquipe[item] = {
-    x: Math.max(4, Math.min(96, x)),
-    y: Math.max(8, Math.min(92, y))
-  };
+function setEquipeItemSelection(itemKey) {
+  selectedEquipeItem = selectedEquipeItem === itemKey ? null : itemKey;
   equipeConfirmada = false;
   renderFase4();
 }
 
+function placeEquipeItem(itemKey, clientX, clientY, board) {
+  if (!itemKey || !board) return;
+
+  const rect = board.getBoundingClientRect();
+  const x = ((clientX - rect.left) / rect.width) * 100;
+  const y = ((clientY - rect.top) / rect.height) * 100;
+
+  gameState.posicoesEquipe[itemKey] = {
+    x: Math.max(4, Math.min(96, x)),
+    y: Math.max(8, Math.min(92, y))
+  };
+  selectedEquipeItem = null;
+  equipeConfirmada = false;
+  renderFase4();
+}
+
+function dropEquipeBoard(e) {
+  e.preventDefault();
+  const item = e.dataTransfer.getData("item");
+  if (!item) return;
+  placeEquipeItem(item, e.clientX, e.clientY, e.currentTarget);
+}
+
+function handleEquipeBoardTap(e) {
+  if (!selectedEquipeItem) return;
+  if (e.target.closest(".team-token")) return;
+  placeEquipeItem(selectedEquipeItem, e.clientX, e.clientY, e.currentTarget);
+}
+
 function removeEquipeItem(itemKey) {
   gameState.posicoesEquipe[itemKey] = null;
+  if (selectedEquipeItem === itemKey) selectedEquipeItem = null;
+  equipeConfirmada = false;
+  renderFase4();
+}
+
+function handleEquipeTokenTap(itemKey) {
+  if (selectedEquipeItem === itemKey) {
+    removeEquipeItem(itemKey);
+    return;
+  }
+  selectedEquipeItem = itemKey;
   equipeConfirmada = false;
   renderFase4();
 }
@@ -849,9 +879,12 @@ function renderFase4() {
   const expected = getEquipeAnswerKey();
   const available = getAvailableEquipeItems();
 
-  const bankHtml = available.map((key) => `
-    <div class="draggable equipe-item" draggable="true" data-item="${key}" ondragstart="equipeDragStart(event)">${equipeDisplay(key, true)}</div>
-  `).join("");
+  const bankHtml = available.map((key) => {
+    const selectedClass = selectedEquipeItem === key ? " selected" : "";
+    return `
+    <div class="draggable equipe-item${selectedClass}" draggable="true" data-item="${key}" ondragstart="equipeDragStart(event)" onclick="setEquipeItemSelection('${key}')">${equipeDisplay(key, true)}</div>
+  `;
+  }).join("");
 
   const droppedTokensHtml = Object.keys(EQUIPE_ITENS).map((itemKey) => {
     const pos = gameState.posicoesEquipe[itemKey];
@@ -869,8 +902,10 @@ function renderFase4() {
       }
     }
 
+    const selectedClass = selectedEquipeItem === itemKey ? " selected" : "";
+
     return `
-      <div class="team-token ${extraClass}" draggable="true" data-item="${itemKey}" data-x="${pos.x}" data-y="${pos.y}" ondragstart="equipeDragStart(event)" onclick="removeEquipeItem('${itemKey}')">
+      <div class="team-token ${extraClass}${selectedClass}" draggable="true" data-item="${itemKey}" data-x="${pos.x}" data-y="${pos.y}" ondragstart="equipeDragStart(event)" onclick="handleEquipeTokenTap('${itemKey}')">
         <span class="token-symbol">${equipeDisplay(itemKey, false)}</span>
         <span class="token-hint">${hint}</span>
       </div>
@@ -883,6 +918,7 @@ function renderFase4() {
     <h2 class="q-title">4. Equipe</h2>
     ${cirurgiaSelecionadaTexto()}
     <p class="subtitle">Arraste os símbolos para qualquer área do tabuleiro. A linha no paciente indica o plano umbilical (supra/infra).</p>
+    <p class="subtitle">No celular: toque em um item e depois toque no tabuleiro para posicionar. Toque novamente no símbolo selecionado para remover.</p>
 
     <div class="bank">
       <p class="bank-title">Equipe e mesa</p>
@@ -895,7 +931,7 @@ function renderFase4() {
       <div class="axis-left">LE</div>
       <div class="axis-right">LD</div>
       <div class="paciente"><div class="paciente-cabeca"></div><div class="paciente-umbigo"></div><div class="paciente-umbigo-label">Cicatriz umbilical</div>Paciente</div>
-      <div id="equipeBoard" class="team-board" ondragover="allowEquipeDrop(event)" ondrop="dropEquipeBoard(event)">
+      <div id="equipeBoard" class="team-board" ondragover="allowEquipeDrop(event)" ondrop="dropEquipeBoard(event)" onclick="handleEquipeBoardTap(event)">
         ${droppedTokensHtml}
       </div>
     </div>
